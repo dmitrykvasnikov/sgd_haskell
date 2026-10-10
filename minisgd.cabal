@@ -1,0 +1,38 @@
+cabal-version:      3.0
+name:               minisgd
+version:            0.1.0.0
+-- synopsis:
+-- description:
+license:            MIT
+license-file:       LICENSE
+author:             Dmitry Kvasnikov
+maintainer:         dmitry.kvasnikov@gmail.com
+-- copyright:
+category:           Math
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+library
+    import:           warnings
+    exposed-modules:  MyLib
+    -- other-modules:
+    -- other-extensions:
+    build-depends:    base ^>=4.20.2.0
+    hs-source-dirs:   lib
+    default-language: GHC2024
+
+executable minisgd
+    import:           warnings
+    main-is:          Main.hs
+    -- other-modules:
+    -- other-extensions:
+    build-depends:
+        base ^>=4.20.2.0,
+        minisgd
+
+    hs-source-dirs:   app
+    default-language: GHC2024
