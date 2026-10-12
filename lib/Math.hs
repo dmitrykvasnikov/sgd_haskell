@@ -1,113 +1,100 @@
 module Math (
+    Matrix,
+    Vector,
     shape,
-    mulvv,
-    mulv,
-    mulmm,
-    mulms,
-    normv,
+    norm,
     transm,
-    addm,
-    subm,
-    mulm,
+    add,
+    sub,
+    mul,
+    hadamard,
+    scale,
+    scalar,
+    dot,
     mkVector,
     mkMatrix,
 )
 where
 
+type Vector a = Matrix a
+
 data Matrix a where
     Matrix :: {rows :: Int, cols :: Int, mx :: [[a]]} -> Matrix a
 
 instance (Show a) => Show (Matrix a) where
-    show (Matrix _ _ m) = "Matrix: ( " ++ (intercalate "\n          " $ map showRow m) ++ " )"
+    show m = case isVector m of
+        True -> "Vector: ( " ++ (intercalate " , " (map show (concat $ mx m))) ++ " )"
+        False -> "Matrix: ( " ++ (intercalate "\n          " $ map showRow $ mx m) ++ " )"
       where
         showRow = intercalate " , " . map (leftPad maxLen . show)
         leftPad l s = take (l - length s) (repeat ' ') ++ s
-        maxLen = maximum . map (length . show) . concat $ m
+        maxLen = maximum . map (length . show) . concat $ mx m
 
 instance Functor Matrix where
     fmap f (Matrix r c m) = Matrix r c $ (map $ map f) m
 
-data Vector a where
-    Vector :: {vr :: [a]} -> Vector a
+instance Foldable Matrix where
+    foldMap f (Matrix _ _ m) = foldMap (foldMap f) m
 
-instance (Show a) => Show (Vector a) where
-    show (Vector v) = "Vector: ( " ++ (intercalate " , " (map show v)) ++ " )"
-
-instance Functor (Vector) where
-    fmap f (Vector v) = Vector $ fmap f v
-
-mkVector :: [a] -> Vector a
-mkVector = Vector
+isVector :: Matrix a -> Bool
+isVector m = cols m == 1
 
 mkMatrix :: [[a]] -> Matrix a
 mkMatrix m =
     case isMatrix (map length m) of
-        True -> Matrix r (if r == 0 then 0 else length . head $ m) m
+        True -> Matrix r (case m of (x : _) -> length x; [] -> 0) m
         False -> error "ERROR: can not create matrix, different length of rows"
   where
     r = length m
     isMatrix [] = True
     isMatrix (x : xs) = all (== x) xs
 
+mkVector :: [a] -> Vector a
+mkVector v = Matrix (length v) 1 (map (: []) v)
+
 shape :: Matrix a -> (Int, Int)
-shape (Matrix r c _) = (r, c)
+shape m = (rows m, cols m)
 
-vtom :: Vector a -> Matrix a
-vtom (Vector v) = Matrix{rows = (length v), cols = 1, mx = map (\x -> [x]) v}
-
-mtov :: Matrix a -> Vector a
-mtov (Matrix r c m) = case (r > 0 && c == 1) of
-    True -> Vector $ map head m
-    False -> error "ERROR: can not convert matrix to vector"
-
--- Vector to vector multiplication
-mulvv :: (Num a) => Vector a -> Vector a -> a
-mulvv (Vector v1) (Vector v2) = sum $ zipWith (*) v1 v2
-
-mulv :: (Num a) => Vector a -> Vector a -> Vector a
-mulv v1 v2 = mtov . mulm (vtom v1) $ (vtom v2)
-
--- Vector normalization
-normv :: (Floating a) => Vector a -> a
-normv (Vector v) = sqrt . sum $ fmap (** 2) v
+norm :: (Floating a) => Matrix a -> a
+norm = sqrt . sum . fmap (** 2)
 
 -- Matrix transpose
 transm :: Matrix a -> Matrix a
 transm (Matrix r c m) = Matrix c r $ go m
   where
-    go [] = repeat []
-    go (row : rows) = zipWith (:) row $ go rows
+    go [] = replicate c []
+    go (row : rest) = zipWith (:) row $ go rest
 
--- Binary operation with matrixes of the same size
-binopm :: (Num a) => (a -> a -> a) -> Matrix a -> Matrix a -> Matrix a
+-- Basic matrix operations
+binopm :: (a -> a -> a) -> Matrix a -> Matrix a -> Matrix a
 binopm op (Matrix r1 c1 m1) (Matrix r2 c2 m2) =
     case (r1 == r2 && c1 == c2) of
         True -> Matrix r1 c1 $ map (uncurry (zipWith op)) (zip m1 m2)
         False -> error "ERROR: can not subtract | add | multiply  matrixes with different dimensions"
 
-addm :: (Num a) => Matrix a -> Matrix a -> Matrix a
-addm = binopm (+)
+add :: (Num a) => Matrix a -> Matrix a -> Matrix a
+add = binopm (+)
 
-subm :: (Num a) => Matrix a -> Matrix a -> Matrix a
-subm = binopm (-)
+sub :: (Num a) => Matrix a -> Matrix a -> Matrix a
+sub = binopm (-)
 
-mulm :: (Num a) => Matrix a -> Matrix a -> Matrix a
-mulm = binopm (*)
+hadamard :: (Num a) => Matrix a -> Matrix a -> Matrix a
+hadamard = binopm (*)
 
--- Matrix scalar multiplication
-mulms :: (Num a) => a -> Matrix a -> Matrix a
-mulms s = fmap (* s)
+scale :: (Num a) => a -> Matrix a -> Matrix a
+scale s = fmap (* s)
 
--- Matrix to vector multiplication
-mulmv :: (Num a) => Matrix a -> Vector a -> Vector a
-mulmv (Matrix r c m) (Vector v) =
-    case (c == length v) of
-        True -> Vector $ map (sum . zipWith (*) v) m
-        False -> error "ERROR: can not multiply matrix on vector with wrong length"
+scalar :: Matrix a -> a
+scalar (Matrix 1 1 [[a]]) = a
+scalar _ = error "ERROR: getting scalar of matrix | vector of wrong size"
 
--- Matrix to matrix multiplication
-mulmm :: (Num a) => Matrix a -> Matrix a -> Matrix a
-mulmm (Matrix r1 c1 m1) m@(Matrix r2 c2 m2) =
+dot :: (Num a) => Vector a -> Vector a -> a
+dot v1 v2
+    | isVector v1 && isVector v2 = scalar . mul (transm v1) $ v2
+    | otherwise = error "ERROR: dot could use only vectors as arguments"
+
+mul :: (Num a) => Matrix a -> Matrix a -> Matrix a
+mul (Matrix r1 c1 m1) m@(Matrix r2 c2 _) =
     case (c1 == r2) of
         True -> Matrix r1 c2 $ fmap (\r -> fmap (sum . zipWith (*) r) m') m1
           where
